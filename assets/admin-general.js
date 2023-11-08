@@ -3,81 +3,31 @@
 	// Store everything in this "o" object
 	const o = {};
 
-	// Make it accessible for other scripts as a global variable
-	window.rs_entry_archives = o;
-
 	// Load settings from enqueue.php and clear the original settings from the global scope
 	const s = window.rsea_settings || false;
 	window.rsea_settings = null;
 
-	// Store settings
-	o.settings = {
-		ajax_url: s.settings.ajax_url || '/wp-admin/admin-ajax.php',
-		nonce:    s.settings.nonce    || false,
-	};
-
-	// Store screen info
-	o.screen = {
-		// action:   s.screen.action || false,
-		// base:     s.screen.base || false,
-		// id:       s.screen.id || false,
-		// page:     s.screen.page || false,
-		// view:     s.screen.view || false,
-
-		form_id:  s.screen.form_id || false,
-		entry_id: s.screen.entry_id || false,
-		filter: s.screen.filter || false,
-
-		is_gravity_forms_screen: s.screen.is_gravity_forms_screen || false,
-		is_form_list_screen: s.screen.is_form_list_screen || false,
-		is_form_edit_screen: s.screen.is_form_edit_screen || false,
-		is_entry_list_screen: s.screen.is_entry_list_screen || false,
-		is_entry_edit_screen: s.screen.is_entry_edit_screen || false
-	};
+	// Store settings as individual variables
+	const ajax_url = s.settings.ajax_url || '/wp-admin/admin-ajax.php';
+	const nonce = s.settings.nonce || false;
 
 	// Code to run after the script is loaded
 	o.init = function() {
 
-		if ( o.is_entry_list_screen() ) {
-			o.setup_entry_list_screen();
-		}
-		
+		// Move the archive links to be after "Mark read" link on entry list page
+		o.reorder_archive_links();
+
+		// Handle links to archive or un-archive entries
+		o.setup_ajax_archive_links();
+
 	};
 
-	o.is_gravity_forms_screen = function() {
-		return o.screen.is_gravity_forms_screen;
-	};
+	// Move the archive links to be after "Mark read" link on entry list page
+	o.reorder_archive_links = function() {
 
-	o.is_form_list_screen = function() {
-		return o.screen.is_form_list_screen;
-	};
-
-	o.is_form_edit_screen = function() {
-		return o.screen.is_form_edit_screen;
-	};
-
-	o.is_entry_list_screen = function() {
-		return o.screen.is_entry_list_screen;
-	};
-
-	o.is_entry_edit_screen = function() {
-		return o.screen.is_entry_edit_screen;
-	};
-
-	o.show_archived_entries = function() {
-		return o.is_entry_list_screen() && ( o.screen.filter === 'archived' || o.screen.filter === 'trash' );
-	};
-
-	// Set up the entry list screen, where entries are displayed for a single form
-	o.setup_entry_list_screen = function() {
-
-		if ( o.show_archived_entries() ) {
-			jQuery(document.body).addClass('rsea-show-archived-entries');
-		}else{
-			jQuery(document.body).addClass('rsea-hide-archived-entries');
-		}
-
+		// Get the entry list table
 		const $list = jQuery('#the-list');
+		if ( $list.length < 1 ) return;
 
 		// Move the archive / un-archive links to be between the "Mark Read/Unread" and "Spam" links
 		$list.find('tr.entry_row').each(function() {
@@ -92,8 +42,24 @@
 			}
 		});
 
+		// Get filter mode from url ?filter=archived
+		const url = new URL(window.location.href);
+		const filter = url.searchParams.get('filter');
+
+		// Add a body class to indicate if we're showing archived entries or not
+		if ( filter === 'archived' ) {
+			jQuery(document.body).addClass('rsea-show-archived-entries');
+		}else{
+			jQuery(document.body).addClass('rsea-hide-archived-entries');
+		}
+
+	};
+
+	// Handle links to archive or un-archive entries
+	o.setup_ajax_archive_links = function() {
+
 		// Clicking on a link to archive or un-archive an entry performs the action with ajax.
-		$list.on('click', 'a.rsea-archive-entry, a.rsea-unarchive-entry', function(e) {
+		jQuery(document.body).on('click', '.rsea-archive-entry, .rsea-unarchive-entry', function(e) {
 			let $link = jQuery(this);
 			let $other_link = $link.siblings('a');
 			let $row = $link.closest('tr.entry_row');
@@ -114,7 +80,7 @@
 
 			// Do an ajax request for that URL. If successful, hide the link. If an error occurs, show a popup
 			jQuery.ajax({
-				url: o.settings.ajax_url,
+				url: ajax_url,
 				method: 'GET',
 				dataType: 'json',
 				data: {
@@ -146,7 +112,7 @@
 			return false;
 		});
 
-	};
+	}
 
 	// Run the initial code on document ready
 	jQuery(document).ready( o.init );

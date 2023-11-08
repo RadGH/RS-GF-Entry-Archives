@@ -33,6 +33,7 @@ class RS_Entry_Archives_Enqueue {
 				'nonce' => wp_create_nonce( 'rsea-nonce' ),
 			),
 			
+			/*
 			'screen' => array(
 				// 'action' => $Settings->get_screen('action'),
 				// 'base' => $Settings->get_screen('base'),
@@ -50,6 +51,7 @@ class RS_Entry_Archives_Enqueue {
 				'is_entry_list_screen' => $Settings->is_entry_list_screen(),
 				'is_entry_edit_screen' => $Settings->is_entry_edit_screen(),
 			),
+			*/
 		));
 			
 	}

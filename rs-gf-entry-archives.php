@@ -2,14 +2,14 @@
 /*
 Plugin Name: RS Entry Archives for Gravity Forms 
 Description: Adds the ability to archive Gravity Forms entries.
-Version: 1.2.0
+Version: 1.4.0
 Author: Radley Sustaire
 Author URI: https://radleysustaire.com/
 */
 
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly.
 
-define( 'RSEA_VERSION', '1.2.0' );
+define( 'RSEA_VERSION', '1.4.0' );
 define( 'RSEA_URL', untrailingslashit(plugin_dir_url( __FILE__ )) );
 define( 'RSEA_PATH', dirname(__FILE__) );
 
@@ -25,8 +25,7 @@ class RS_Entry_Archives_Plugin {
 		add_action( 'plugins_loaded', array( $this, 'load_plugin' ) );
 		
 		// Register activation and deactivation hooks
-		// register_activation_hook( __FILE__, array( $this, 'activate_plugin' ) );
-		// register_deactivation_hook( __FILE__, array( $this, 'deactivate_plugin' ) );
+		register_activation_hook( __FILE__, array( $this, 'activate_plugin' ) );
 		
 	}
 	
@@ -43,23 +42,13 @@ class RS_Entry_Archives_Plugin {
 		
 	}
 	
-	/*
 	public function activate_plugin() {
 		
-		// Flush permalinks
-		flush_rewrite_rules();
+		// Perform upgrades when the plugin is updated
+		$install = include( RSEA_PATH . '/classes/advanced/install.php' );
+		$install->upgrade();
 		
 	}
-	*/
-	
-	/*
-	public static function deactivate_plugin() {
-		
-		// Flush permalinks
-		flush_rewrite_rules();
-		
-	}
-	*/
 	
 }
 

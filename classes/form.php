@@ -5,10 +5,10 @@ class RS_Entry_Archives_Form {
 	function __construct() {
 		
 		// Add a filter to view archived entries to the entries screen
-		add_filter( 'gform_filter_links_entry_list', array( $this, 'update_filter_links' ), 30, 3 );
+		add_filter( 'gform_filter_links_entry_list', array( $this, 'add_archived_filter_link' ), 30, 3 );
 		
-		// When filtering by filter=archive, show archived entries only in the entry screen
-		// (not needed, see field_filters in the filter link)
+		// When using the archive filter view, only show archived entries
+		add_filter( 'gform_gf_query_sql', array( $this, 'pre_get_entries_sql' ), 20, 2 );
 		
 		// Add a link to archive an entry next to the spam and trash links
 		add_action( 'gform_entries_first_column_actions', array( $this, 'add_archive_link' ), 10, 5 );
@@ -19,9 +19,6 @@ class RS_Entry_Archives_Form {
 		
 		// Show a notice on the admin after archiving or un-archiving an entry
 		add_action( 'admin_notices', array( $this, 'show_archive_notice' ) );
-		
-		// Hooks that apply on the entry list screen which effect the queried entries
-		$this->add_archived_view_hooks();
 		
 		// Add a bulk action to mark multiple entries as archived / un-archived
 		add_filter( 'gform_entry_list_bulk_actions', array( $this, 'add_bulk_actions' ), 10, 2 );
@@ -38,82 +35,44 @@ class RS_Entry_Archives_Form {
 		// Add a conditional logic field to export screen (and other areas)
 		add_filter( 'gform_field_filters', array( $this, 'add_conditional_logic_field' ), 10, 2 );
 		
-		// When performing an export, exclude archived entries by default unless conditional logic overrides it
-		add_filter( 'wp_ajax_gf_process_export', array( $this, 'apply_conditional_logic_for_exporting' ), 5 );
+		// When performing an export, allow conditional logic for entry status or archive status
+		add_filter( 'gform_search_criteria_export_entries', array( $this, 'apply_conditional_logic_status_for_exporting' ), 10, 2 );
+		
+		// Gravity Forms doesn't support the "any" status, so we replace it in the MySQL query
+		add_filter( 'gform_gf_query_sql', array( $this, 'pre_get_entries_any_status' ), 20, 2 );
 		
 		// Add a custom column for archive status to the entry list screen
-	    add_filter( 'gform_form_post_get_meta', array( $this, 'add_archive_status_column' ), 10, 1 );
+	    add_filter( 'gform_form_post_get_meta', array( $this, 'add_entry_status_column' ), 10, 1 );
 		
 	}
 	
 	/**
-	 * Count the number of entries for each type of filter, accounting for archived entries based on filter.
-	 * If the query takes more than 1 second to generate, results are cached for 10 minutes.
+	 * Add a filter to view archived entries to the entries screen
 	 *
-	 * @param int $form_id
+	 * @param $filter_links
+	 * @param $form
+	 * @param $include_counts
 	 *
-	 * @return array {
-	 *     @type int $total
-	 *     @type int $unread
-	 *     @type int $starred
-	 *     @type int $spam
-	 *     @type int $trash
-	 *     @type int $archived
-	 * }
+	 * @return mixed
 	 */
-	public function get_filter_entry_counts( $form_id ) {
-		global $wpdb;
+	function add_archived_filter_link( $filter_links, $form, $include_counts ) {
 		
-		$cache_key = 'rs_unarchived_form_counts_' . $form_id;
+		$archived_count = $include_counts ? GFAPI::count_entries( $form['id'], array( 'status' => 'archived' ) ) : 0;
 		
-		$results = get_transient( $cache_key );
-		if ( ! empty( $results ) ) return $results;
+		// Add a filter for archived entries
+		$filter_links[] = array(
+			'id' => 'archived',
+			'count' => $archived_count,
+			'label'   => esc_html__( 'Archived', 'rs-entry-archives' ),
+		);
 		
-		/**
-		 * @see GFFormsModel::get_entry_table_name()
-		 * @see GFFormsModel::get_entry_meta_table_name()
-		 */
-		$entry_table_name = $wpdb->prefix . 'gf_entry';
-		$entry_detail_table_name = $wpdb->prefix . 'gf_entry_meta';
-		
-		$select = "count(DISTINCT(e.id)) FROM $entry_table_name e ";
-		$select.= "LEFT JOIN $entry_detail_table_name m ON e.id = m.entry_id AND m.meta_key = 'is_archived'";
-		
-		$ignore_archived = "e.form_id = $form_id";
-		$not_archived = "e.form_id = $form_id AND (m.meta_key IS NULL OR m.meta_value != '1')";
-		$is_archived = "e.form_id = $form_id AND m.meta_value = '1'";
-		
-		$sql = <<<SQL
-SELECT
-       (SELECT {$select} WHERE {$not_archived}    AND e.status = 'active')                      as total,
-       (SELECT {$select} WHERE {$not_archived}    AND e.status = 'active' AND e.is_read = 0 )   as unread,
-       (SELECT {$select} WHERE {$not_archived}    AND e.status = 'active' AND e.is_starred = 1) as starred,
-       (SELECT {$select} WHERE {$ignore_archived} AND e.status = 'spam')                        as spam,
-       (SELECT {$select} WHERE {$ignore_archived} AND e.status = 'trash')                       as trash,
-       (SELECT {$select} WHERE {$is_archived}     AND e.status = 'active')                      as archived
-SQL;
-		
-		$wpdb->timer_start();
-		
-		$results = $wpdb->get_results( $sql, ARRAY_A );
-		
-		$time_total = $wpdb->timer_stop();
-		
-		// If the query took longer than 1 second to generate, cache it for 10 minutes
-		if ( $time_total > 1 ) {
-			set_transient(  $cache_key, $results[0], 10 * MINUTE_IN_SECONDS );
+		// The "All" filter actually excludes spam, trash, and archived entries.
+		// Change that label to "Active" instead.
+		foreach( $filter_links as &$f ) if ( $f['id'] === 'all' ) {
+			$f['label'] = esc_html__( 'Active', 'rs-entry-archives' );
 		}
 		
-		return $results[0];
-	}
-	
-	public function add_archived_view_hooks() {
-		// When entries are queried on the entry list page, filter out any archived entries, or view only archived entries
-		add_filter( 'gform_gf_query_sql', array( $this, 'modify_entry_search_sql' ), 20, 2 );
-	}
-	
-	public function remove_archived_view_hooks() {
-		remove_filter( 'gform_gf_query_sql', array( $this, 'modify_entry_search_sql' ), 20 );
+		return $filter_links;
 	}
 	
 	/**
@@ -130,95 +89,24 @@ SQL;
 	 *
 	 * @return array
 	 */
-	function modify_entry_search_sql( $sql ) {
+	function pre_get_entries_sql( $sql ) {
 		if ( ! RS_Entry_Archives()->Settings->is_entry_list_screen() ) return $sql;
-
-		$filter = isset($_GET['filter']) ? stripslashes($_GET['filter']) :'';
 		
-		// When filtering by "archived", gravity forms already checked for the meta key "is_archived" = 1.
-		// For other filters, except trash, hide archived entries.
-		if ( $filter == 'archived' || $filter == 'trash' ) return $sql;
+		$filter = isset($_GET['filter']) ? stripslashes($_GET['filter']) : 'all';
 		
-		global $wpdb;
+		// default filters: all, unread, star, spam, trash, archived
 		
-		$table = $wpdb->prefix . 'gf_entry_meta';
-		$column = 'rs_archived';
-		
-		$sql['join'] .= ' LEFT JOIN `'. $table .'` AS `'. $column .'` ON (`'. $column .'`.`entry_id` = `t1`.`id` AND `'. $column .'`.`meta_key` = "is_archived")';
-		$sql['where'] .= ' AND `'. $column .'`.meta_value IS NULL';
-		
-		return $sql;
-	}
-	
-	/**
-	 * Add a filter to view archived entries to the entries screen
-	 *
-	 * @param $filter_links
-	 * @param $form
-	 * @param $include_counts
-	 *
-	 * @return mixed
-	 */
-	function update_filter_links( $filter_links, $form, $include_counts ) {
-		
-		// Add a filter for archived entries
-		$filter_links[] = array(
-			'id' => 'archived',
-			'status' => 'active',
-			'field_filters' => array(
-				array( 'key' => 'is_archived', 'value' => 1 ),
-			),
-			'count' => 0, // calculated below. previously: $this->get_archived_entry_count( $form['id'] )
-			'label'   => esc_html__( 'Archived', 'rs-entry-archives' ),
-		);
-		
-		if ( $include_counts ) {
-			
-			// Recalculate entry counts, accounting for archived entries
-			$counts = $this->get_filter_entry_counts( $form['id'] );
-			
-			// Replace the counts for each filter link
-			foreach( $filter_links as &$f ) switch( $f['id'] ) {
-				case 'all':      $f['count'] = $counts['total']; break;
-				case 'unread':   $f['count'] = $counts['unread']; break;
-				case 'star':     $f['count'] = $counts['starred']; break;
-				case 'spam':     $f['count'] = $counts['spam']; break;
-				case 'trash':    $f['count'] = $counts['trash']; break;
-				case 'archived': $f['count'] = $counts['archived']; break;
-			}
+		if ( $filter === 'archived' ) {
+			$sql['where'] = str_replace(
+				"`status` = 'active'",
+				"`status` = 'archived'",
+				$sql['where']
+			);
 			
 		}
 		
-		return $filter_links;
+		return $sql;
 	}
-	
-	/**
-	 * Count the number of entries that have been archived for a given form ID
-	 *
-	 * @param $form_id
-	 *
-	 * @return int
-	 */
-	/*
-	function get_archived_entry_count( $form_id ) {
-		$search_criteria = array(
-			'field_filters' => array(
-				array( 'key' => 'is_archived', 'value' => 1 ),
-			),
-		);
-		
-		// Temporarily unhook the filters that exclude archived entries from the query
-		$this->remove_archived_view_hooks();
-		
-		// Count entries that are archived.
-		$count = GFAPI::count_entries( $form_id, $search_criteria );
-		
-		// Re-add hooks
-		$this->add_archived_view_hooks();
-		
-		return $count;
-	}
-	*/
 	
 	/**
 	 * Add a link to archive an entry next to the spam and trash links
@@ -236,6 +124,7 @@ SQL;
 		
 		$archive_link = $this->get_archive_entry_url( $entry['id'], true );
 		$unarchive_link = $this->get_archive_entry_url( $entry['id'], false );
+		
 		?>
 		<span class="edit rsea-archive-link">
             <a data-entry-id="<?php echo $entry['id']; ?>" id="archive_entry_<?php echo esc_attr( $entry['id'] ); ?>" aria-label="Archive this entry" href="<?php echo esc_attr($archive_link); ?>" class="rsea-archive-entry" <?php if ( $is_archived ) echo 'style="display: none;"'; ?>><?php esc_html_e( 'Archive', 'rs-entry-archives' ); ?></a>
@@ -385,7 +274,12 @@ SQL;
 	 */
 	public function add_export_field( $form ) {
 		$form['fields'][] = array(
-			'label' => 'Is Archived',
+			'label' => 'Entry Status',
+			'id' => 'entry_status',
+		);
+		
+		$form['fields'][] = array(
+			'label' => 'Archive Status',
 			'id' => 'is_archived',
 		);
 		
@@ -403,9 +297,13 @@ SQL;
 	 * @return string|array
 	 */
 	public function add_export_value( $value, $form_id, $field_id, $entry ) {
-		if ( $field_id !== 'is_archived' ) return $value;
+		if ( $field_id === 'is_archived' ) {
+			$value = $this->is_archived( $entry['id'] ) ? 'Archived' : '';
+		}
 		
-		$value = $this->is_archived( $entry['id'] ) ? 'Archived' : '';
+		if ( $field_id === 'entry_status' ) {
+			$value = $entry['status'];
+		}
 		
 		return $value;
 	}
@@ -419,6 +317,35 @@ SQL;
 	 * @return array
 	 */
 	public function add_conditional_logic_field( $field_filters, $form ) {
+		$field_filters[] = array(
+			'key'             => 'entry_status',
+			'preventMultiple' => false,
+			'text'            => esc_html__( 'Entry Status', 'rs-entry-archives' ),
+			'operators'       => array( 'is' ),
+			'values'          => array(
+				array(
+					'text' => esc_html__( 'Active (Default)' , 'rs-entry-archives' ),
+					'value' => 'active'
+				),
+				array(
+					'text' => esc_html__( 'Any Status' , 'rs-entry-archives' ),
+					'value' => 'any'
+				),
+				array(
+					'text' => esc_html__( 'Archived' , 'rs-entry-archives' ),
+					'value' => 'archived'
+				),
+				array(
+					'text' => esc_html__( 'Spam' , 'rs-entry-archives' ),
+					'value' => 'spam'
+				),
+				array(
+					'text' => esc_html__( 'Trash' , 'rs-entry-archives' ),
+					'value' => 'trash'
+				),
+			),
+		);
+		
 		$field_filters[] = array(
 			'key'             => 'is_archived',
 			'preventMultiple' => false,
@@ -450,41 +377,125 @@ SQL;
 	 *
 	 * @param array|null $form
 	 *
-	 * @return void
+	 * @return string|array
 	 */
-	public function apply_conditional_logic_for_exporting( $form = null ) {
+	public function get_entry_status_from_conditional_logic_post() {
 		$filter_fields    = rgpost( 'f' ) ?: array();
 		$filter_operators = rgpost( 'o' ) ?: array();
 		$filter_values    = rgpost( 'v' ) ?: array();
 		$filter_t         = rgpost( 't' ) ?: array();
 		
-		// IDK what the "t" field is for, but it should align with the others.
+		// Get the conditional logic for "Entry Status"
+		$status_index = array_search( 'entry_status', $filter_fields );
 		
-		$index = array_search( 'is_archived', $filter_fields );
-		
-		if ( $index === false ) {
-			// Did not filter by archive status with conditional logic.
-			// Default to hide archived entries.
-			$filter_fields[] = 'is_archived';
-			$filter_operators[] = 'is';
-			$filter_values[] = '';
-			$filter_t[] = '';
-		}else if ( $filter_values[$index] === '-1' ) {
-			// Conditional logic selected "Any" for archive status.
-			// In this case, remove the filter and do not apply the default value
-			unset( $filter_fields[$index] );
-			unset( $filter_operators[$index] );
-			unset( $filter_values[$index] );
-			unset( $filter_t[$index] );
+		if ( $status_index !== false ) {
+			$status = stripslashes( $filter_values[$status_index] );
+			
+			// Remove the conditional logic from POST because Gravity Forms will think its entry meta
+//			unset( $filter_fields[$status_index] );
+//			unset( $filter_operators[$status_index] );
+//			unset( $filter_values[$status_index] );
+//			unset( $filter_t[$status_index] );
+			
+			// Replace the conditional logic field to something that is always true
+			$filter_fields[$status_index] = 'date_created';
+			$filter_operators[$status_index] = '>';
+			$filter_values[$status_index] = '1970-01-01';
+			$filter_t[$status_index] = '';
+			
+			return $status;
 		}
 		
-		// Gravity Forms does not let us filter these directly.
-		// Instead, modify the global variables before they are used.
-		$_POST['f'] = $filter_fields;
-		$_POST['o'] = $filter_operators;
-		$_POST['v'] = $filter_values;
-		$_POST['t'] = $filter_t;
+		// Get the conditional logic for "Archive Status"
+		$filter_index = array_search( 'is_archived', $filter_fields );
 		
+		if ( $filter_index !== false ) {
+			$status = stripslashes( $filter_values[$filter_index] );
+			
+			// Remove the conditional logic from POST because Gravity Forms will think its entry meta
+			unset( $filter_fields[$filter_index] );
+			unset( $filter_operators[$filter_index] );
+			unset( $filter_values[$filter_index] );
+			unset( $filter_t[$filter_index] );
+			
+			if ( $status === '-1' ) {
+				return 'any';
+			}else if ( $status === '1' ) {
+				return 'archived';
+			}
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * Apply conditional logic to the search criteria for exporting entries
+	 *
+	 * @param array $search_criteria The search criteria array being filtered.
+	 * @param int $form_id           The current form ID.
+	 *
+	 * @return array
+	 */
+	public function apply_conditional_logic_status_for_exporting( $search_criteria, $form_id ) {
+		if ( empty($search_criteria['field_filters']) ) return $search_criteria;
+		
+		// Our conditional logic fields are added as "field_filters" (meta fields)
+		// We need to change them to filter by status instead.
+		foreach( $search_criteria['field_filters'] as $i => $f ) {
+			if ( $i === 'mode' ) continue;
+			
+			$key = $f['key'];
+			$value = $f['value'];
+			
+			if ( $key === 'entry_status' ) {
+				// Change the status being searched for
+				$search_criteria['status'] = $value;
+				
+				// Remove the filter because this is not a meta field
+				unset( $search_criteria['field_filters'][$i] );
+			}
+			
+			if ( $key === 'is_archived' ) {
+				// Change the status being searched for
+				if ( $value === '1' ) {
+					$search_criteria['status'] = 'archived';
+				}else if ( $value === '-1' ) {
+					$search_criteria['status'] = 'any';
+				}else{
+					$search_criteria['status'] = 'active';
+				}
+				
+				// Remove the filter because this is not a meta field
+				unset( $search_criteria['field_filters'][$i] );
+			}
+		}
+		
+		return $search_criteria;
+	}
+	
+	
+	/**
+	 * Allow gravity forms to query the entry status "any", which is not supported by default
+	 *
+	 * @param array $sql An array with all the SQL fragments: select, from, join, where, order, paginate. {
+	 *     @type string $select   "SELECT SQL_CALC_FOUND_ROWS DISTINCT `t1`.`id`"
+	 *     @type string $from     "FROM `wp_gf_entry` AS `t1`"
+	 *     @type string $join     "LEFT JOIN `wp_gf_entry_meta` AS `m2` ON (`m2`.`entry_id` = `t1`.`id` AND `m2`.`meta_key` = 'is_archived')"
+	 *     @type string $where    "WHERE (`t1`.`form_id` IN (1) AND (`t1`.`status` = 'active' AND (`m2`.`meta_key` = 'is_archived' AND `m2`.`meta_value` = '1')))"
+	 *     @type string $order    "ORDER BY `t1`.`id` DESC"
+	 *     @type string $paginate "LIMIT 20"
+	 * }
+	 *
+	 * @return array
+	 */
+	function pre_get_entries_any_status( $sql ) {
+		$sql['where'] = str_replace(
+			"`status` = 'any'",
+			"`status` IN ( 'active', 'spam', 'trash', 'archived' )",
+			$sql['where']
+		);
+		
+		return $sql;
 	}
 	
 	/**
@@ -494,7 +505,7 @@ SQL;
 	 *
 	 * @return array
 	 */
-	public function add_archive_status_column( $form ) {
+	public function add_entry_status_column( $form ) {
 		
 		// Only add this field to the entry list screen, or the column select screen
 		// The column select screen pops up in an iframe
@@ -505,6 +516,11 @@ SQL;
 		// Add a very basic field similar to:
 		/** @see GFSelectColumns::select_columns_page() */
 		$form['fields'][] = array(
+			'id' => 'entry_status',
+			'label' => esc_html__( 'Entry Status', 'rs-entry-archives' ),
+		);
+		
+		$form['fields'][] = array(
 			'id' => 'is_archived',
 			'label' => esc_html__( 'Archive Status', 'rs-entry-archives' ),
 		);
@@ -512,7 +528,7 @@ SQL;
 		$form = GFFormsModel::convert_field_objects( $form );
 		
 		// Display the column value for archive status
-		add_filter( 'gform_entries_column_filter', array( $this, 'display_archive_status_column_value' ), 10, 5 );
+		add_filter( 'gform_entries_column_filter', array( $this, 'display_entry_status_column_value' ), 10, 5 );
 		
 		return $form;
 	}
@@ -528,14 +544,42 @@ SQL;
 	 *
 	 * @return mixed|string|null
 	 */
-	public function display_archive_status_column_value( $value, $form_id, $field_id, $entry, $query_string ) {
-		if ( $field_id !== 'is_archived' ) return $value;
-		
-		if ( $this->is_archived( $entry['id'] ) ) {
-			return __( 'Archived', 'rs-entry-archives' );
-		}else{
-			return __( 'Not Archived', 'rs-entry-archives' );
+	public function display_entry_status_column_value( $value, $form_id, $field_id, $entry, $query_string ) {
+		if ( $field_id == 'is_archived' ) {
+			if ( $this->is_archived( $entry['id'] ) ) {
+				return __( 'Archived', 'rs-entry-archives' );
+			}else{
+				return __( 'Not Archived', 'rs-entry-archives' );
+			}
 		}
+		
+		if ( $field_id == 'entry_status' ) {
+			return $this->get_status_label( $entry['status'] );
+		}
+		
+		return $value;
+	}
+	
+	/**
+	 * Convert a status key to a formatted label, e.g. "active" to "Active"
+	 *
+	 * @param $status
+	 *
+	 * @return string
+	 */
+	public function get_status_label( $status ) {
+		switch( $status ) {
+			case 'active':   return __( 'Active', 'rs-entry-archives' );
+			case 'archived': return __( 'Archived', 'rs-entry-archives' );
+			case 'spam':     return __( 'Spam', 'rs-entry-archives' );
+			case 'trash':    return __( 'Trash', 'rs-entry-archives' );
+		}
+		
+		// Convert "some-status" to "Some Status"
+		$status = str_replace(array('-','_'), ' ', $status);
+		$status = ucwords( $status );
+		
+		return $status;
 	}
 	
 	/**
@@ -583,14 +627,27 @@ SQL;
 		return $base_url;
 	}
 	
+	/**
+	 * Archive an entry
+	 *
+	 * @param $entry_id
+	 *
+	 * @return void
+	 */
 	function archive_entry( $entry_id ) {
-		gform_update_meta( $entry_id, 'is_archived', 1 );
-		gform_update_meta( $entry_id, 'archive_date', date( 'Y-m-d H:i:s' ) );
+		GFAPI::update_entry_property( $entry_id, 'status', 'archived' );
 	}
 	
-	function unarchive_entry( $entry_id ) {
-		gform_delete_meta( $entry_id, 'is_archived' );
-		gform_delete_meta( $entry_id, 'archive_date' );
+	/**
+	 * Un-archive an entry, making it active again
+	 *
+	 * @param $entry_id
+	 * @param $status
+	 *
+	 * @return void
+	 */
+	function unarchive_entry( $entry_id, $status = 'active' ) {
+		GFAPI::update_entry_property( $entry_id, 'status', $status );
 	}
 	
 	/**
@@ -598,7 +655,8 @@ SQL;
 	 * @return bool
 	 */
 	function is_archived( $entry_id ) {
-		return 1 === (int) gform_get_meta( $entry_id, 'is_archived' );
+		$entry = GFAPI::get_entry( $entry_id );
+		return rgar($entry, 'status') === 'archived';
 	}
 	
 	
