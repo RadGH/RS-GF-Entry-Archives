@@ -1,0 +1,26 @@
+tr.entry_row.loading,
+body.rsea-show-archived-entries tr.entry_row.rsea-not-archived,
+body.rsea-hide-archived-entries tr.entry_row.rsea-archived {
+	opacity: 0.5;
+}
+
+body.rsea-show-archived-entries tr.entry_row.rsea-not-archived td.has-row-actions::before,
+body.rsea-hide-archived-entries tr.entry_row.rsea-archived td.has-row-actions::before {
+	content: "\f530";
+	font-family: dashicons;
+	color: #999;
+	margin-right: 5px;
+	line-height: 1;
+}
+
+/* Fix conditional logic dropdown being too narrow and cutting off the label despite having extra room */
+@supports ( display: flex ) {
+	html .form-table .gform-settings-field__conditional-logic select,
+	html .form-table .gform-settings-field__conditional-logic input[type=text] {
+		width: auto;
+		min-width: 10%;
+		max-width: 50%;
+		padding-left: 8px;
+		padding-right: 28px;
+	}
+}
