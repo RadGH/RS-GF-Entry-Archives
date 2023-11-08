@@ -5,7 +5,7 @@ class RS_Entry_Archives_Form {
 	function __construct() {
 		
 		// Add a filter to view archived entries to the entries screen
-		add_filter( 'gform_filter_links_entry_list', array( $this, 'add_archived_filter_link' ), 30, 3 );
+		add_filter( 'gform_filter_links_entry_list', array( $this, 'update_filter_links' ), 30, 3 );
 		
 		// When filtering by filter=archive, show archived entries only in the entry screen
 		// (not needed, see field_filters in the filter link)
@@ -46,6 +46,67 @@ class RS_Entry_Archives_Form {
 		
 	}
 	
+	/**
+	 * Count the number of entries for each type of filter, accounting for archived entries based on filter.
+	 * If the query takes more than 1 second to generate, results are cached for 10 minutes.
+	 *
+	 * @param int $form_id
+	 *
+	 * @return array {
+	 *     @type int $total
+	 *     @type int $unread
+	 *     @type int $starred
+	 *     @type int $spam
+	 *     @type int $trash
+	 *     @type int $archived
+	 * }
+	 */
+	public function get_filter_entry_counts( $form_id ) {
+		global $wpdb;
+		
+		$cache_key = 'rs_unarchived_form_counts_' . $form_id;
+		
+		$results = get_transient( $cache_key );
+		if ( ! empty( $results ) ) return $results;
+		
+		/**
+		 * @see GFFormsModel::get_entry_table_name()
+		 * @see GFFormsModel::get_entry_meta_table_name()
+		 */
+		$entry_table_name = $wpdb->prefix . 'gf_entry';
+		$entry_detail_table_name = $wpdb->prefix . 'gf_entry_meta';
+		
+		$select = "count(DISTINCT(e.id)) FROM $entry_table_name e ";
+		$select.= "LEFT JOIN $entry_detail_table_name m ON e.id = m.entry_id AND m.meta_key = 'is_archived'";
+		
+		$ignore_archived = "e.form_id = $form_id";
+		$not_archived = "e.form_id = $form_id AND (m.meta_key IS NULL OR m.meta_value != '1')";
+		$is_archived = "e.form_id = $form_id AND m.meta_value = '1'";
+		
+		$sql = <<<SQL
+SELECT
+       (SELECT {$select} WHERE {$not_archived}    AND e.status = 'active')                      as total,
+       (SELECT {$select} WHERE {$not_archived}    AND e.status = 'active' AND e.is_read = 0 )   as unread,
+       (SELECT {$select} WHERE {$not_archived}    AND e.status = 'active' AND e.is_starred = 1) as starred,
+       (SELECT {$select} WHERE {$ignore_archived} AND e.status = 'spam')                        as spam,
+       (SELECT {$select} WHERE {$ignore_archived} AND e.status = 'trash')                       as trash,
+       (SELECT {$select} WHERE {$is_archived}     AND e.status = 'active')                      as archived
+SQL;
+		
+		$wpdb->timer_start();
+		
+		$results = $wpdb->get_results( $sql, ARRAY_A );
+		
+		$time_total = $wpdb->timer_stop();
+		
+		// If the query took longer than 1 second to generate, cache it for 10 minutes
+		if ( $time_total > 1 ) {
+			set_transient(  $cache_key, $results[0], 10 * MINUTE_IN_SECONDS );
+		}
+		
+		return $results[0];
+	}
+	
 	public function add_archived_view_hooks() {
 		// When entries are queried on the entry list page, filter out any archived entries, or view only archived entries
 		add_filter( 'gform_gf_query_sql', array( $this, 'modify_entry_search_sql' ), 20, 2 );
@@ -71,7 +132,7 @@ class RS_Entry_Archives_Form {
 	 */
 	function modify_entry_search_sql( $sql ) {
 		if ( ! RS_Entry_Archives()->Settings->is_entry_list_screen() ) return $sql;
-		
+
 		$filter = isset($_GET['filter']) ? stripslashes($_GET['filter']) :'';
 		
 		// When filtering by "archived", gravity forms already checked for the meta key "is_archived" = 1.
@@ -98,15 +159,35 @@ class RS_Entry_Archives_Form {
 	 *
 	 * @return mixed
 	 */
-	function add_archived_filter_link( $filter_links, $form, $include_counts ) {
+	function update_filter_links( $filter_links, $form, $include_counts ) {
+		
+		// Add a filter for archived entries
 		$filter_links[] = array(
 			'id' => 'archived',
+			'status' => 'active',
 			'field_filters' => array(
 				array( 'key' => 'is_archived', 'value' => 1 ),
 			),
-			'count' => $include_counts ? $this->get_archived_entry_count( $form['id'] ) : false,
+			'count' => 0, // calculated below. previously: $this->get_archived_entry_count( $form['id'] )
 			'label'   => esc_html__( 'Archived', 'rs-entry-archives' ),
 		);
+		
+		if ( $include_counts ) {
+			
+			// Recalculate entry counts, accounting for archived entries
+			$counts = $this->get_filter_entry_counts( $form['id'] );
+			
+			// Replace the counts for each filter link
+			foreach( $filter_links as &$f ) switch( $f['id'] ) {
+				case 'all':      $f['count'] = $counts['total']; break;
+				case 'unread':   $f['count'] = $counts['unread']; break;
+				case 'star':     $f['count'] = $counts['starred']; break;
+				case 'spam':     $f['count'] = $counts['spam']; break;
+				case 'trash':    $f['count'] = $counts['trash']; break;
+				case 'archived': $f['count'] = $counts['archived']; break;
+			}
+			
+		}
 		
 		return $filter_links;
 	}
@@ -118,6 +199,7 @@ class RS_Entry_Archives_Form {
 	 *
 	 * @return int
 	 */
+	/*
 	function get_archived_entry_count( $form_id ) {
 		$search_criteria = array(
 			'field_filters' => array(
@@ -136,6 +218,7 @@ class RS_Entry_Archives_Form {
 		
 		return $count;
 	}
+	*/
 	
 	/**
 	 * Add a link to archive an entry next to the spam and trash links
