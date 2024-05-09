@@ -3,12 +3,6 @@ RS Entry Archives for Gravity Forms  (WordPress Plugin)
 
 _This plugin adds the ability to archive Gravity Forms entries, which are hidden from the default entry view._
 
-## Getting Started ##
-
-### 1. Download the plugin: [rs-gf-entry-archives.zip](https://github.com/RadGH/rs-gf-entry-archives/archive/refs/heads/master.zip)
-### 2. Upload to the Plugins screen.
-### 3. Activate the plugin.
-
 ## Description ##
 
 This plugin allows you to mark entries as archived, similar to how you would mark them as read or unread. Archived entries only show under the Entries list when you select the "Archived" filter.
@@ -18,17 +12,6 @@ Here you can see the archive functionality from the Entry list screen:
 1. ![Screenshot showing the Archive link in the row actions below the first column.](assets/screenshots/screenshot-0.png)
 2. ![Screenshot the message confirming the entry was archived.](assets/screenshots/screenshot-4.png)
 3. ![Screenshot showing the updated post count for each filter, the newly archived entry changed the archived entry count from 7 to 8.](assets/screenshots/screenshot-5.png)
-
-## Manual Install ##
-
-1. Install and activate [Gravity Forms](https://www.gravityforms.com/) (not included).
-2. Install this plugin's zip file through the Plugins screen:
-   1. Navigate to the Plugins screen: ![Plugin menu on dashboard sidebar](assets/screenshots/install-1.png)
-   2. Click the button Upload Plugin: ![Upload Plugin button being clicked](assets/screenshots/install-2.png)
-   3. Select the zip file, then click Install Now: ![File upload field being selected](assets/screenshots/install-3.png)
-3. Activate the plugin through the Plugins screen: ![Link to activate the plugin](assets/screenshots/install-4.png)
-4. View the entries for any form. Hover over an entry and see the "Archive" and "Unarchive" option.
-5. You can view archived entries by selecting the "Archived" filter at the top, near the search field.
 
 ## Screenshots ##
 
@@ -45,6 +28,10 @@ A message appears to indicate when an entry has been archived.
 ![Screenshot the message confirming the entry was archived.](assets/screenshots/screenshot-4.png)
 
 ## Changelog ##
+
+#### 1.4.1
+* Added Git Updater support
+* Updated Readme
 
 #### 1.2.0
 * Added to GitHub

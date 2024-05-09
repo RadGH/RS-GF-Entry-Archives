@@ -2,14 +2,16 @@
 /*
 Plugin Name: RS Entry Archives for Gravity Forms 
 Description: Adds the ability to archive Gravity Forms entries.
-Version: 1.4.0
+Version: 1.4.1
 Author: Radley Sustaire
 Author URI: https://radleysustaire.com/
+GitHub Plugin URI: https://github.com/RadGH/RS-GF-Entry-Archives
+Primary Branch: main
 */
 
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly.
 
-define( 'RSEA_VERSION', '1.4.0' );
+define( 'RSEA_VERSION', '1.4.1' );
 define( 'RSEA_URL', untrailingslashit(plugin_dir_url( __FILE__ )) );
 define( 'RSEA_PATH', dirname(__FILE__) );
 
