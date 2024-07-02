@@ -127,9 +127,9 @@ class RS_Entry_Archives_Form {
 		
 		?>
 		<span class="edit rsea-archive-link">
-            <a data-entry-id="<?php echo $entry['id']; ?>" id="archive_entry_<?php echo esc_attr( $entry['id'] ); ?>" aria-label="Archive this entry" href="<?php echo esc_attr($archive_link); ?>" class="rsea-archive-entry" <?php if ( $is_archived ) echo 'style="display: none;"'; ?>><?php esc_html_e( 'Archive', 'rs-entry-archives' ); ?></a>
+            |
+			<a data-entry-id="<?php echo $entry['id']; ?>" id="archive_entry_<?php echo esc_attr( $entry['id'] ); ?>" aria-label="Archive this entry" href="<?php echo esc_attr($archive_link); ?>" class="rsea-archive-entry" <?php if ( $is_archived ) echo 'style="display: none;"'; ?>><?php esc_html_e( 'Archive', 'rs-entry-archives' ); ?></a>
             <a data-entry-id="<?php echo $entry['id']; ?>" id="unarchive_entry_<?php echo esc_attr( $entry['id'] ); ?>" aria-label="Remove entry from archives" href="<?php echo esc_attr($unarchive_link); ?>" class="rsea-unarchive-entry" <?php if ( !$is_archived ) echo 'style="display: none;"'; ?>><?php esc_html_e( 'Unarchive', 'rs-entry-archives' ); ?></a>
-			<?php echo GFCommon::current_user_can_any( 'gravityforms_delete_entries' ) || GFCommon::akismet_enabled( $form_id ) ? '|' : '' ?>
         </span>
 		<?php
 	}
