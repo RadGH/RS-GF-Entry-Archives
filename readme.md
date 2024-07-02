@@ -29,6 +29,9 @@ A message appears to indicate when an entry has been archived.
 
 ## Changelog ##
 
+#### 1.4.2
+* Moved separator before archive link
+
 #### 1.4.1
 * Added Git Updater support
 * Updated Readme
