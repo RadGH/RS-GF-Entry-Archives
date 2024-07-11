@@ -90,19 +90,25 @@ class RS_Entry_Archives_Form {
 	 * @return array
 	 */
 	function pre_get_entries_sql( $sql ) {
-		if ( ! RS_Entry_Archives()->Settings->is_entry_list_screen() ) return $sql;
+		// Determine whether we should display archived entries instead of active entries
+		$display_archived_posts = false;
 		
-		$filter = isset($_GET['filter']) ? stripslashes($_GET['filter']) : 'all';
+		// Show archived entries on the entry screen IF the filter is set to "archived"
+		// Default filters: all, unread, star, spam, trash, archived
+		if ( RS_Entry_Archives()->Settings->is_entry_list_screen() ) {
+			$filter = isset($_GET['filter']) ? stripslashes($_GET['filter']) : 'all';
+			if ( $filter === 'archived' ) $display_archived_posts = true;
+		}
 		
-		// default filters: all, unread, star, spam, trash, archived
+		// Allow plugins to override the display of archived entries with custom logic
+		$display_archived_posts = apply_filters( 'rs_entry_archives/show_archived_entries', $display_archived_posts );
 		
-		if ( $filter === 'archived' ) {
+		if ( $display_archived_posts ) {
 			$sql['where'] = str_replace(
 				"`status` = 'active'",
 				"`status` = 'archived'",
 				$sql['where']
 			);
-			
 		}
 		
 		return $sql;
