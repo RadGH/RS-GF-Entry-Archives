@@ -29,6 +29,9 @@ A message appears to indicate when an entry has been archived.
 
 ## Changelog ##
 
+#### 1.4.3
+* Added the filter `rs_entry_archives/show_archived_entries`, if set to true, the entries displayed on the current page will show archived entries instead of active ones.
+
 #### 1.4.2
 * Moved separator before archive link
 
