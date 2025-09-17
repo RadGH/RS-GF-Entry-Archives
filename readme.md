@@ -3,6 +3,8 @@ RS Entry Archives for Gravity Forms  (WordPress Plugin)
 
 _This plugin adds the ability to archive Gravity Forms entries, which are hidden from the default entry view._
 
+- [View this plugin on Zingmap.com](https://zingmap.com/plugin/rs-entry-archives-for-gravity-forms/)
+
 ## Description ##
 
 This plugin allows you to mark entries as archived, similar to how you would mark them as read or unread. Archived entries only show under the Entries list when you select the "Archived" filter.
